@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Leaflet Map with Toggle Controls</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body, html{
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    
+    #map {
+      height: 100vh;
+      width: 100%;
+      border: none;
+    }
+
+    /* Password Protection Overlay */
+    #password-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.85);
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    
+    #password-form {
+      background: #2c3e50;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      width: 300px;
+      text-align: center;
+    }
+    
+    #password-form h2 {
+      margin-top: 0;
+      margin-bottom: 20px;
+      color: white;
+    }
+    
+    #password-input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 15px;
+      border: none;
+      border-radius: 5px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+    
+    #submit-password {
+      width: 100%;
+      padding: 12px;
+      background: #3498db;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.3s;
+    }
+    
+    #submit-password:hover {
+      background: #2980b9;
+    }
+    
+    #error-message {
+      color: #e74c3c;
+      margin-top: 10px;
+      display: none;
+    }
+
+    /* Control Panel Container */
+    .map-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* Individual Control Boxes */
+    .control-box {
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      width: 220px;
+      transition: all 0.3s ease;
+    }
+
+    /* Toggle buttons - positioned to align with controls */
+    .toggle-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1001;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .toggle-btn button {
+      background: white;
+      border: none;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      width: 100px; /* Fixed width for consistency */
+    }
+    
+    .toggle-btn button:hover {
+      background: #f0f0f0;
+    }
+
+    /* Location button specific style */
+    #toggle-location {
+      background: #4CAF50;
+      color: white;
+    }
+    
+    #toggle-location:hover {
+      background: #45a049;
+    }
+
+    /* Location marker style */
+    .location-marker {
+      background: #4CAF50;
+      border: 3px solid white;
+    }
+
+    /* Filter Control - positioned below its button */
+    #filter-control {
+      margin-bottom: 0;
+      position: absolute;
+      top: 150px; /* Below the first button */
+      right: 10px;
+      z-index: 1000;
+    }
+
+    #layer-filter {
+      width: 100%;
+      padding: 5px;
+      margin-top: 5px;
+    }
+
+    /* Point Control - positioned below its button */
+    #point-control {
+      position: absolute;
+      top: 220px; /* Below the second button (50px + 48px button height) */
+      right: 10px;
+      z-index: 1000;
+    }
+
+    #point-control h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .coord-input {
+      width: 100%;
+      padding: 5px;
+      margin: 5px 0;
+      box-sizing: border-box;
+    }
+
+    #add-point-btn {
+      width: 100%;
+      padding: 5px;
+      margin-top: 5px;
+    }
+
+    /* Map Elements */
+    .line-label {
+      background: none !important;
+      border: none !important;
+      box-shadow: none !important;
+      color: blue;
+      font-weight: bold;
+      font-size: 13px;
+      padding: 0;
+    }
+    
+    .highlighted {
+      color: yellow !important;
+      stroke: yellow !important;
+      fill: yellow !important;
+    }
+
+    /* Custom position for bottom right layer control */
+    .leaflet-control-layers {
+      margin-bottom: 10px !important;
+      margin-right: 10px !important;
+    }
+    
+    /* Hidden state */
+    .hidden {
+      opacity: 0;
+      transform: translateX(20px);
+      pointer-events: none;
+    }
+
+    /* Location accuracy circle */
+    .location-accuracy {
+      fill: #4CAF50;
+      fill-opacity: 0.2;
+      stroke: #4CAF50;
+      stroke-opacity: 0.4;
+      stroke-width: 2;
+    }
+  </style>
+</head>
+<body>
+  <!-- Password Protection Overlay -->
+  <div id="password-overlay">
+    <div id="password-form">
+      <h2>Enter Password</h2>
+      <input type="password" id="password-input" placeholder="Password" autocomplete="off">
+      <button id="submit-password">Enter</button>
+      <div id="error-message">Incorrect password. Please try again.</div>
+    </div>
+  </div>
+  
+  <div id="map"></div>
+  
+  <!-- Toggle Buttons -->
+  <div class="toggle-btn">
+    <button id="toggle-filter">Filter</button>
+    <button id="toggle-points">Points</button>
+    <button id="toggle-location">My Location</button>
+  </div>
+  
+  <!-- Control Boxes positioned below their respective buttons -->
+  <div id="filter-control" class="control-box hidden">
+    <label for="layer-filter">Filter Feeders:</label>
+    <select id="layer-filter">
+      <option value="all">All Feeders</option>
+      <!-- Options will be added dynamically -->
+    </select>
+  </div>
+
+  <div id="point-control" class="control-box hidden">
+    <h3>Add Custom Point</h3>
+    <div>
+      <label>Latitude:</label>
+      <input type="number" id="lat-input" class="coord-input" step="0.000001" placeholder="33.3">
+    </div>
+    <div>
+      <label>Longitude:</label>
+      <input type="number" id="lng-input" class="coord-input" step="0.000001" placeholder="44.4">
+    </div>
+    <div>
+      <label>Point Name:</label>
+      <input type="text" id="point-name" class="coord-input" placeholder="My Point">
+    </div>
+    <button id="add-point-btn">Add Point</button>
+  </div>
+
+  <!-- JavaScript Libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.gridlayer.googlemutant@latest/dist/Leaflet.GoogleMutant.js"></script>
+
+  <script>
+    // Password protection system
+    const passwordOverlay = document.getElementById('password-overlay');
+    const passwordInput = document.getElementById('password-input');
+    const submitPassword = document.getElementById('submit-password');
+    const errorMessage = document.getElementById('error-message');
+    
+
+    const correctPasswordHash = 'ee2a97012be2bcdce8cd1b481636723abd0ab53b71390374066758313a10b917';
+    
+    // Function to hash input using SHA-256
+    async function sha256(message) {
+      const msgBuffer = new TextEncoder().encode(message);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    
+    // Check password on form submission
+    submitPassword.addEventListener('click', async function() {
+      const inputPassword = passwordInput.value;
+      const hashedInput = await sha256(inputPassword);
+      
+      if (hashedInput === correctPasswordHash) {
+        // Correct password - hide overlay and show map
+        passwordOverlay.style.display = 'none';
+        initializeMap();
+      } else {
+        // Incorrect password - show error
+        errorMessage.style.display = 'block';
+        passwordInput.value = '';
+        passwordInput.focus();
+      }
+    });
+    
+    // Allow pressing Enter to submit
+    passwordInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        submitPassword.click();
+      }
+    });
+    
+    // Focus on password input when page loads
+    window.addEventListener('load', function() {
+      passwordInput.focus();
+    });
+    
+    // Map initialization function (only called after correct password)
+    function initializeMap() {
+      // Initialize the map
+      const map = L.map('map').setView([33.3, 44.4], 7);
+
+      // Define base layers
+      const baseLayers = {
+        "OpenStreetMap": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 22,
+          attribution: '&copy; OpenStreetMap contributors'
+        }),
+        // "Google Road": L.gridLayer.googleMutant({
+        //   type: 'roadmap',
+        //   maxZoom: 22,
+        //   apiKey: 'YOUR_GOOGLE_API_KEY'  // Replace with your actual API key
+        // }),
+        // "Google Satellite": L.gridLayer.googleMutant({
+        //   type: 'satellite',
+        //   maxZoom: 22,
+        //   apiKey: 'YOUR_GOOGLE_API_KEY'  // Replace with your actual API key
+        // }),
+        // "Google Hybrid": L.gridLayer.googleMutant({
+        //   type: 'hybrid',
+        //   maxZoom: 22,
+        //   apiKey: 'YOUR_GOOGLE_API_KEY'  // Replace with your actual API key
+        // }),
+        "ESRI World Imagery": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Tiles &copy; Esri'
+        })
+      };
+
+      // Add default base layer
+      baseLayers["OpenStreetMap"].addTo(map);
+
+      // Store the currently highlighted feature
+      let currentlyHighlighted = null;
+      let lineLayer;
+      let allFeatures = [];
+      const layerNames = new Set();
+      
+      // Marker icon
+      const customIcon = L.icon({
+        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41]
+      });
+      
+      // Location marker icon (green)
+      const locationIcon = L.icon({
+        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        className: 'location-marker'
+      });
+      
+      // Store markers
+      const markers = [];
+      
+      // Store location marker and circle
+      let locationMarker = null;
+      let accuracyCircle = null;
+      
+      // Toggle functionality
+      document.getElementById('toggle-filter').addEventListener('click', function() {
+        const filterControl = document.getElementById('filter-control');
+        filterControl.classList.toggle('hidden');
+      });
+      
+      document.getElementById('toggle-points').addEventListener('click', function() {
+        const pointControl = document.getElementById('point-control');
+        pointControl.classList.toggle('hidden');
+      });
+      
+      // Location button handler - one-time location
+      document.getElementById('toggle-location').addEventListener('click', function() {
+        showCurrentLocation();
+      });
+      
+      function showCurrentLocation() {
+        if (!navigator.geolocation) {
+          alert('Geolocation is not supported by your browser');
+          return;
+        }
+        
+        // Clear existing location markers
+        if (locationMarker) {
+          map.removeLayer(locationMarker);
+          locationMarker = null;
+        }
+        if (accuracyCircle) {
+          map.removeLayer(accuracyCircle);
+          accuracyCircle = null;
+        }
+        
+        // Show loading state
+        const locationButton = document.getElementById('toggle-location');
+        const originalText = locationButton.textContent;
+        locationButton.textContent = 'Getting Location...';
+        locationButton.disabled = true;
+        
+        // Get current position once
+        navigator.geolocation.getCurrentPosition(
+          function(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+            
+            // Add location marker
+            locationMarker = L.marker([lat, lng], { icon: locationIcon })
+              .bindPopup(`<b>Your Current Location</b><br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}<br>Accuracy: ${Math.round(accuracy)} meters`)
+              .addTo(map);
+            
+            // Add accuracy circle
+            accuracyCircle = L.circle([lat, lng], {
+              radius: accuracy,
+              className: 'location-accuracy'
+            }).addTo(map);
+            
+            // Center map on location with zoom level 16
+            map.setView([lat, lng], 16);
+            
+            // Reset button state
+            locationButton.textContent = originalText;
+            locationButton.disabled = false;
+          },
+          function(error) {
+            // Handle errors
+            let errorMessage = 'Error getting your location: ';
+            switch(error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage += 'Permission denied. Please allow location access.';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                errorMessage += 'Location information unavailable.';
+                break;
+              case error.TIMEOUT:
+                errorMessage += 'Location request timed out.';
+                break;
+              default:
+                errorMessage += 'Unknown error occurred.';
+                break;
+            }
+            
+            alert(errorMessage);
+            console.error('Error getting location:', error);
+            
+            // Reset button state
+            locationButton.textContent = originalText;
+            locationButton.disabled = false;
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000, // 10 seconds timeout
+            maximumAge: 60000 // Accept cached position up to 1 minute old
+          }
+        );
+      }
+      
+      // Add point button handler
+      document.getElementById('add-point-btn').addEventListener('click', function() {
+        const lat = parseFloat(document.getElementById('lat-input').value);
+        const lng = parseFloat(document.getElementById('lng-input').value);
+        const name = document.getElementById('point-name').value || "Unnamed Point";
+        
+        if (isNaN(lat) || isNaN(lng)) {
+          alert("Please enter valid coordinates");
+          return;
+        }
+        
+        // Create and add marker
+        const marker = L.marker([lat, lng], { icon: customIcon })
+          .bindPopup(`<b>${name}</b><br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}`)
+          .addTo(map);
+        
+        markers.push(marker);
+        
+        // Center map on new point
+        map.setView([lat, lng], map.getZoom());
+        
+        // Clear inputs
+        document.getElementById('point-name').value = '';
+      });
+
+      // Function to handle feature click
+      function highlightFeature(e) {
+        if (currentlyHighlighted) {
+          currentlyHighlighted.setStyle({
+            color: 'red',
+            weight: 3,
+            opacity: 0.8
+          });
+        }
+        
+        const layer = e.target;
+        layer.setStyle({
+          color: 'yellow',
+          weight: 5,
+          opacity: 1
+        });
+        
+        currentlyHighlighted = layer;
+      }
+
+      function resetHighlight(e) {}
+
+      function updateLabels() {
+        const zoom = map.getZoom();
+        const showLabels = zoom > 14;
+        
+        lineLayer.eachLayer(function(layer) {
+          if (layer.getTooltip()) {
+            showLabels ? layer.openTooltip() : layer.closeTooltip();
+          }
+        });
+      }
+
+      function filterFeatures() {
+        const selectedLayer = document.getElementById('layer-filter').value;
+        const filteredLayers = [];
+        
+        lineLayer.eachLayer(function(layer) {
+          const layerName = layer.feature.properties.layer || "";
+          if (selectedLayer === "all" || layerName === selectedLayer) {
+            layer.addTo(map);
+            filteredLayers.push(layer);
+          } else {
+            map.removeLayer(layer);
+          }
+        });
+        
+        if (selectedLayer !== "all" && filteredLayers.length > 0) {
+          const group = new L.FeatureGroup(filteredLayers);
+          map.fitBounds(group.getBounds(), {
+            padding: [50, 50],
+            maxZoom: 15
+          });
+        } else if (selectedLayer === "all") {
+          map.fitBounds(lineLayer.getBounds());
+        }
+      }
+
+      // Load GeoJSON
+      fetch('FINAL_ALL_FEEDERS.geojson')
+        .then(response => response.json())
+        .then(data => {
+          allFeatures = data.features;
+          
+          allFeatures.forEach(feature => {
+            if (feature.properties?.layer) {
+              layerNames.add(feature.properties.layer);
+            }
+          });
+          
+          const filterSelect = document.getElementById('layer-filter');
+          Array.from(layerNames).sort().forEach(name => {
+            const option = new Option(name, name);
+            filterSelect.appendChild(option);
+          });
+          
+          filterSelect.addEventListener('change', filterFeatures);
+          
+          lineLayer = L.geoJSON(data, {
+            style: {
+              color: 'red',
+              weight: 3,
+              opacity: 0.8
+            },
+            onEachFeature: function(feature, layer) {
+              const name = feature.properties.layer || "Unnamed Line";
+              layer.bindPopup(`<b>ناوی فیدەر:</b> ${name}`);
+              
+              layer.on({
+                click: highlightFeature,
+                mouseout: resetHighlight
+              });
+              
+              if (feature.properties?.layer) {
+                layer.bindTooltip(feature.properties.layer, {
+                  permanent: true,
+                  direction: 'center',
+                  className: 'line-label'
+                });
+                
+                if (map.getZoom() <= 10) layer.closeTooltip();
+              }
+            }
+          });
+
+          lineLayer.addTo(map);
+          map.fitBounds(lineLayer.getBounds());
+          
+          // Add layer control at BOTTOM RIGHT position
+          L.control.layers(baseLayers, null, {
+            position: 'bottomright',
+            collapsed: false
+          }).addTo(map);
+          
+          map.on('zoomend', updateLabels);
+        })
+        .catch(error => {
+          console.error('Error loading GeoJSON:', error);
+        });
+    }
+  </script>
+</body>
+</html>
